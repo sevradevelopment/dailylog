@@ -270,6 +270,18 @@ export default function Today({ session, userRole, onLogout }) {
         </div>
       )}
 
+      {/* Motivational Quote */}
+      <div className="card" style={{ background: "linear-gradient(135deg, #dbeafe 0%, #f0f9ff 100%)", border: "1px solid #bfdbfe", marginBottom: "2rem" }}>
+        <div style={{ textAlign: "center", padding: "1rem" }}>
+          <p style={{ fontSize: "1.1rem", fontStyle: "italic", color: "var(--text-secondary)", margin: 0 }}>
+            "Iga päev on uus võimalus olla parem kui eile."
+          </p>
+          <p style={{ fontSize: "0.9rem", color: "var(--text-tertiary)", marginTop: "0.5rem" }}>
+            – Tööpäeviku meeskond
+          </p>
+        </div>
+      </div>
+
       <form onSubmit={handleSave}>
         <div className="card">
           {/* Admin: töö tüübi valik */}
