@@ -92,13 +92,13 @@ export default function Login() {
               width: 72,
               height: 72,
               borderRadius: "18px",
-              background: "linear-gradient(135deg, #10b981, #059669)",
+              background: "linear-gradient(135deg, #2563eb, #1d4ed8)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
               fontSize: "2.5rem",
               margin: "0 auto 1.25rem",
-              boxShadow: "0 10px 30px rgba(16, 185, 129, 0.4)",
+              boxShadow: "0 10px 30px rgba(37, 99, 235, 0.4)",
             }}
           >
             <Ico name="tree" size={48} />
