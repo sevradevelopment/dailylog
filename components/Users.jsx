@@ -46,13 +46,25 @@ const IconTrash = () => (
   </svg>
 );
 
+const ICON_PATHS = {
+  check: <path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/>,
+  x: <path d="M18.364 5.636l-3.536 3.536 3.536 3.536-1.414 1.414-3.536-3.536-3.536 3.536-1.414-1.414 3.536-3.536-3.536-3.536 1.414-1.414 3.536 3.536 3.536-3.536z"/>,
+  clipboard: <path d="M16 4h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h4V2a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2zm-6 0h4V2H10v2z"/>,
+};
+
+const Ico = ({ name, size = 18, ...props }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+    {ICON_PATHS[name]}
+  </svg>
+);
+
 export default function Users() {
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [showAddForm, setShowAddForm] = useState(false);
   const [editingUser, setEditingUser] = useState(null);
-  const [message, setMessage] = useState("");
+  const [message, setMessage] = useState({ type: '', text: '' });
   const [currentUserId, setCurrentUserId] = useState(null);
   const [confirmDialog, setConfirmDialog] = useState({ isOpen: false, title: "", message: "", type: "danger", onConfirm: null });
 
@@ -85,7 +97,7 @@ export default function Users() {
 
     if (error) {
       console.error("Error loading users:", error);
-      setMessage(`Viga: ${error.message}`);
+      setMessage({ type: 'error', text: `Viga: ${error.message}` });
     } else {
       setUsers(data || []);
     }
@@ -110,17 +122,17 @@ export default function Users() {
     setMessage("");
 
     if (!newUser.email || !newUser.pin) {
-      setMessage("Palun täida kõik väljad");
+      setMessage({ type: 'error', text: "Palun täida kõik väljad" });
       return;
     }
 
     if (newUser.pin.length < 4) {
-      setMessage("PIN peab olema vähemalt 4 numbrit");
+      setMessage({ type: 'error', text: "PIN peab olema vähemalt 4 numbrit" });
       return;
     }
 
     setLoading(true);
-    setMessage("Kontrollin kasutajat...");
+    setMessage({ type: 'info', text: "Kontrollin kasutajat..." });
 
     const email = newUser.email.trim().toLowerCase();
     const password = `${newUser.pin}${SALT}`;
@@ -134,7 +146,7 @@ export default function Users() {
         .single();
 
       if (existingProfile) {
-        setMessage(`⚠️ Kasutaja ${email} on juba olemas!`);
+        setMessage({ type: 'error', text: `Kasutaja ${email} on juba olemas!` });
         setLoading(false);
         loadUsers();
         return;
@@ -152,23 +164,23 @@ export default function Users() {
       await navigator.clipboard.writeText(JSON.stringify(userData, null, 2));
       
       // Näita juhiseid koos "Lisa profiil" nupuga
-      const instructions = `📋 Kasutaja andmed kopeeritud lõikelauale!
+      const instructions = `Kasutaja andmed kopeeritud lõikelauale!
 
 Email: ${email}
 Password: ${password}
 
-⚠️ Kasutaja tuleb luua Supabase Dashboard'is:
+Kasutaja tuleb luua Supabase Dashboard'is:
 1. Mine Authentication → Users → Add user
 2. Kleepi email ja password
 3. Kliki "Create user"
 4. Kopeeri UID ja kliki allpool "Lisa profiil"`;
 
-      setMessage(instructions);
+      setMessage({ type: 'info', text: instructions });
       // Ära sulge vormi, et kasutaja saaks pärast profiili lisada
       // Vorm jääb avatuks, et kasutaja saaks pärast Supabase'is kasutaja loomist kohe profiili lisada
       
     } catch (err) {
-      setMessage(`❌ Viga: ${err.message}`);
+      setMessage({ type: 'error', text: `Viga: ${err.message}` });
     }
     
     setLoading(false);
@@ -205,7 +217,7 @@ Password: ${password}
     }
 
     setLoading(true);
-    setMessage("Kontrollin ja lisamas profiili...");
+    setMessage({ type: 'info', text: "Kontrollin ja lisamas profiili..." });
 
     try {
       // Kontrolli kas profiil on juba olemas
@@ -216,7 +228,7 @@ Password: ${password}
         .single();
 
       if (existingProfile) {
-        setMessage("⚠️ Profiil on juba olemas!");
+        setMessage({ type: 'error', text: "Profiil on juba olemas!" });
         setLoading(false);
         loadUsers();
         return;
@@ -234,9 +246,9 @@ Password: ${password}
         });
 
       if (error) {
-        setMessage(`❌ Viga profiili lisamisel: ${error.message}`);
+        setMessage({ type: 'error', text: `Viga profiili lisamisel: ${error.message}` });
       } else {
-        setMessage("✅ Profiil lisatud edukalt! Kasutaja saab nüüd sisse logida.");
+        setMessage({ type: 'success', text: "Profiil lisatud edukalt! Kasutaja saab nüüd sisse logida." });
         setNewUser({ email: "", name: "", pin: "", role: "worker" });
         setShowAddForm(false);
         loadUsers();
@@ -245,7 +257,7 @@ Password: ${password}
         }, 5000);
       }
     } catch (err) {
-      setMessage(`❌ Viga: ${err.message}`);
+      setMessage({ type: 'error', text: `Viga: ${err.message}` });
     }
 
     setLoading(false);
@@ -254,8 +266,8 @@ Password: ${password}
   async function handleUpdateRole(userId, newRole) {
     // Kontrolli, kas kasutaja üritab muuta enda rolli
     if (userId === currentUserId) {
-      setMessage("⚠️ Sa ei saa enda rolli muuta");
-      setTimeout(() => setMessage(""), 3000);
+      setMessage({ type: 'error', text: "Sa ei saa enda rolli muuta" });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
       return;
     }
 
@@ -265,11 +277,11 @@ Password: ${password}
       .eq("id", userId);
 
     if (error) {
-      setMessage(`Viga: ${error.message}`);
+      setMessage({ type: 'error', text: `Viga: ${error.message}` });
     } else {
-      setMessage("Roll uuendatud ✅");
+      setMessage({ type: 'success', text: "Roll uuendatud" });
       loadUsers();
-      setTimeout(() => setMessage(""), 3000);
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     }
   }
 
@@ -295,8 +307,8 @@ Password: ${password}
   async function handleToggleDisabled(userId, email, currentDisabled) {
     // Kontrolli, kas kasutaja üritab keelustada enda
     if (userId === currentUserId) {
-      setMessage("⚠️ Sa ei saa enda keelustada");
-      setTimeout(() => setMessage(""), 3000);
+      setMessage({ type: 'error', text: "Sa ei saa enda keelustada" });
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
       return;
     }
 
@@ -306,11 +318,11 @@ Password: ${password}
       .eq("id", userId);
 
     if (error) {
-      setMessage(`Viga: ${error.message}`);
+      setMessage({ type: 'error', text: `Viga: ${error.message}` });
     } else {
-      setMessage(`${!currentDisabled ? "Keelatud" : "Lubatud"} kasutaja ${email} ✅`);
+      setMessage({ type: 'success', text: `${!currentDisabled ? "Keelatud" : "Lubatud"} kasutaja ${email}` });
       loadUsers();
-      setTimeout(() => setMessage(""), 3000);
+      setTimeout(() => setMessage({ type: '', text: '' }), 3000);
     }
   }
 
@@ -339,7 +351,7 @@ Password: ${password}
           return;
         }
 
-        setMessage(`Kasutaja ${email} kustutatud ✅\n\nMärkus: Authentication kasutaja tuleb kustutada käsitsi Supabase Dashboard'ist.`);
+        setMessage({ type: 'success', text: `Kasutaja ${email} kustutatud\n\nMärkus: Authentication kasutaja tuleb kustutada käsitsi Supabase Dashboard'ist.` });
         loadUsers();
         setTimeout(() => setMessage(""), 5000);
       },
@@ -379,23 +391,29 @@ Password: ${password}
       </div>
 
       {/* Tagasiside */}
-      {message && (
+      {message.text && (
         <div
           className="card fade-in"
           style={{
             marginBottom: "1.5rem",
             padding: "1.5rem",
-            backgroundColor: message.includes("✅") ? "#d1fae5" : message.includes("📋") ? "#dbeafe" : "#fee2e2",
-            color: message.includes("✅") ? "#065f46" : message.includes("📋") ? "#1e40af" : "#991b1b",
-            border: `2px solid ${message.includes("✅") ? "#059669" : message.includes("📋") ? "#2563eb" : "#dc2626"}`,
+            backgroundColor: message.type === 'success' ? 'var(--success-light)' : message.type === 'info' ? 'var(--info-light)' : 'var(--danger-light)',
+            color: message.type === 'success' ? 'var(--text)' : message.type === 'info' ? 'var(--text)' : 'var(--text)',
+            border: `2px solid ${message.type === 'success' ? 'var(--success)' : message.type === 'info' ? 'var(--info)' : 'var(--danger)'}`,
             whiteSpace: "pre-line",
             lineHeight: "1.6",
             fontSize: "1rem",
+            display: "flex",
+            alignItems: "flex-start",
+            gap: "0.5rem",
           }}
         >
-          {message}
-          {message.includes("📋") && (
-            <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "2px solid #93c5fd" }}>
+          {message.type === 'success' && <Ico name="check" size={20} />}
+          {message.type === 'error' && <Ico name="x" size={20} />}
+          {message.type === 'info' && <Ico name="clipboard" size={20} />}
+          <span>{message.text}</span>
+          {message.type === 'info' && (
+            <div style={{ marginTop: "1.5rem", paddingTop: "1.5rem", borderTop: "2px solid var(--info)", width: "100%" }}>
               <p style={{ marginBottom: "1rem", fontWeight: "600" }}>Pärast kasutaja loomist Supabase'is:</p>
               <button
                 onClick={handleAddProfile}
