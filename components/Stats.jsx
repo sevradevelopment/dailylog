@@ -1,10 +1,13 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 
 export default function Stats() {
   const [stats, setStats] = useState({ totalHours: 0, totalLogs: 0, activeUsers: 0, thisWeekHours: 0, totalFuelLiters: 0, totalFuelCost: 0 });
   const [recentLogs, setRecentLogs] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [hoursChartData, setHoursChartData] = useState([]);
+  const [userActivityData, setUserActivityData] = useState([]);
 
   useEffect(() => { loadStats(); }, []);
 
@@ -49,6 +52,31 @@ export default function Stats() {
       setRecentLogs((recentLogsData || []).map(l => ({
         ...l, profiles: pm.get(l.user_id) || null, sites: l.site_id ? (sm.get(l.site_id) || null) : null,
       })));
+
+      // Prepare chart data
+      const thirtyDaysAgo = new Date();
+      thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+      const thirtyDaysAgoStr = thirtyDaysAgo.toISOString().split("T")[0];
+      const { data: chartLogs } = await supabase.from("daily_logs").select("work_date, hours").gte("work_date", thirtyDaysAgoStr);
+
+      const dateMap = {};
+      (chartLogs || []).forEach(log => {
+        const date = log.work_date;
+        if (!dateMap[date]) dateMap[date] = 0;
+        dateMap[date] += Number(log.hours) || 0;
+      });
+      const chartData = Object.keys(dateMap).sort().map(date => ({ date, hours: dateMap[date] }));
+      setHoursChartData(chartData);
+
+      // User activity pie
+      const userMap = {};
+      (weekLogs || []).forEach(log => {
+        const uid = log.user_id;
+        if (!userMap[uid]) userMap[uid] = 0;
+        userMap[uid] += Number(log.hours) || 0;
+      });
+      const userActivity = Object.keys(userMap).map(uid => ({ name: pm.get(uid)?.name || uid.slice(0,8), hours: userMap[uid] }));
+      setUserActivityData(userActivity);
     } catch (e) {
       console.error(e);
     }
@@ -85,6 +113,37 @@ export default function Stats() {
             <div className="stat-card-sub">{s.sub}</div>
           </div>
         ))}
+      </div>
+
+      {/* Charts */}
+      <div className="chart-grid">
+        <div className="card">
+          <h3 style={{ fontSize: "1.25rem", fontWeight: "700", marginBottom: "1rem" }}>Tundide trend (viimased 30 päeva)</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <LineChart data={hoursChartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="var(--border)" />
+              <XAxis dataKey="date" stroke="var(--text-secondary)" />
+              <YAxis stroke="var(--text-secondary)" />
+              <Tooltip contentStyle={{ backgroundColor: 'var(--bg-card)', border: '1px solid var(--border)' }} />
+              <Legend />
+              <Line type="monotone" dataKey="hours" stroke="var(--primary)" strokeWidth={3} dot={{ fill: 'var(--primary)' }} />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+
+        <div className="card">
+          <h3 style={{ fontSize: "1.25rem", fontWeight: "700", marginBottom: "1rem" }}>Kasutajate aktiivsus (sel nädalal)</h3>
+          <ResponsiveContainer width="100%" height={300}>
+            <PieChart>
+              <Pie data={userActivityData} dataKey="hours" nameKey="name" cx="50%" cy="50%" outerRadius={80} fill="var(--primary)" label>
+                {userActivityData.map((entry, index) => (
+                  <Cell key={`cell-${index}`} fill={`hsl(${index * 360 / userActivityData.length}, 70%, 50%)`} />
+                ))}
+              </Pie>
+              <Tooltip />
+            </PieChart>
+          </ResponsiveContainer>
+        </div>
       </div>
 
       <div className="card">
