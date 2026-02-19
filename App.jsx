@@ -1,4 +1,5 @@
-import { useEffect, useState, useCallback } from "react";
+import React, { useEffect, useMemo, useCallback, useRef, useState } from "react";
+import { Routes, Route, Navigate, useNavigate } from "react-router-dom";
 import { supabase } from "./supabase";
 import Login from "./components/Login";
 import Sidebar from "./components/Sidebar";
@@ -8,99 +9,61 @@ import Users from "./components/Users";
 import Locations from "./components/Locations";
 import Stats from "./components/Stats";
 import Fuel from "./components/Fuel";
+import Notifications from "./components/Notifications";
+import PWAInstallPrompt from "./components/PWAInstallPrompt";
 import "./index.css";
 
 // Session timeout: 1 hour
-const SESSION_TIMEOUT = 60 * 60 * 1000;
+const SESSION_TIMEOUT_MS = 60 * 60 * 1000;
+
+// Throttle activity updates (avoid state spam)
+const ACTIVITY_THROTTLE_MS = 15_000;
+
+function LoadingScreen() {
+  return (
+    <div className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="text-center">
+        <svg className="animate-spin h-12 w-12 text-blue-600 mx-auto" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+        </svg>
+        <p className="mt-4 text-gray-600">Laen…</p>
+      </div>
+    </div>
+  );
+}
 
 export default function App() {
   const [session, setSession] = useState(null);
   const [userRole, setUserRole] = useState("worker");
   const [userName, setUserName] = useState("");
-  const [currentPage, setCurrentPage] = useState("today");
-  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
-  const [lastActivity, setLastActivity] = useState(Date.now());
+  const [isMobile, setIsMobile] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Responsive handler
+  // Keep activity time in a ref to avoid re-render on every event
+  const lastActivityRef = useRef(Date.now());
+  const lastActivityWriteRef = useRef(0);
+
+  // Prevent setState after unmount
+  const mountedRef = useRef(true);
+
+  // ---- Responsive: use matchMedia (more correct than resize+innerWidth) ----
   useEffect(() => {
-    const handleResize = () => setIsMobile(window.innerWidth < 768);
-    window.addEventListener("resize", handleResize);
-    return () => window.removeEventListener("resize", handleResize);
-  }, []);
+    const mq = window.matchMedia("(max-width: 767px)");
 
-  // Activity tracker
-  useEffect(() => {
-    const events = ["mousedown", "keypress", "scroll", "touchstart", "click"];
-    const updateActivity = () => setLastActivity(Date.now());
-    
-    events.forEach(event => 
-      document.addEventListener(event, updateActivity, { passive: true })
-    );
-    
-    return () => 
-      events.forEach(event => 
-        document.removeEventListener(event, updateActivity)
-      );
-  }, []);
+    const apply = () => setIsMobile(mq.matches);
+    apply();
 
-  // Session timeout checker
-  useEffect(() => {
-    if (!session) return;
-
-    const interval = setInterval(() => {
-      if (Date.now() - lastActivity >= SESSION_TIMEOUT) {
-        handleLogout();
-      }
-    }, 60000); // Check every minute
-
-    return () => clearInterval(interval);
-  }, [session, lastActivity]);
-
-  // Auth state management
-  useEffect(() => {
-    let mounted = true;
-
-    async function initAuth() {
-      try {
-        const { data: { session: currentSession } } = await supabase.auth.getSession();
-        
-        if (mounted) {
-          setSession(currentSession);
-          if (currentSession) {
-            await loadUserProfile(currentSession.user.id);
-          }
-        }
-      } catch (error) {
-        console.error("Auth initialization error:", error);
-      } finally {
-        if (mounted) setIsLoading(false);
-      }
-    }
-
-    initAuth();
-
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (_event, newSession) => {
-        if (mounted) {
-          setSession(newSession);
-          if (newSession) {
-            await loadUserProfile(newSession.user.id);
-          } else {
-            setUserRole("worker");
-            setUserName("");
-          }
-        }
-      }
-    );
+    // Safari < 14 fallback
+    if (mq.addEventListener) mq.addEventListener("change", apply);
+    else mq.addListener(apply);
 
     return () => {
-      mounted = false;
-      subscription.unsubscribe();
+      if (mq.removeEventListener) mq.removeEventListener("change", apply);
+      else mq.removeListener(apply);
     };
   }, []);
 
-  // Load user profile
+  // ---- User profile loader ----
   const loadUserProfile = useCallback(async (userId) => {
     try {
       const { data, error } = await supabase
@@ -111,69 +74,146 @@ export default function App() {
 
       if (error) throw error;
 
-      if (data) {
-        setUserRole(data.role || "worker");
-        setUserName(data.name || data.email?.split("@")[0] || "Kasutaja");
-      }
+      const role = data?.role || "worker";
+      const name = data?.name || data?.email?.split("@")?.[0] || "Kasutaja";
+
+      if (!mountedRef.current) return;
+      setUserRole(role);
+      setUserName(name);
     } catch (error) {
       console.error("Error loading profile:", error);
+      if (!mountedRef.current) return;
+      setUserRole("worker");
+      setUserName("");
     }
   }, []);
 
-  // Logout handler
+  // ---- Logout ----
   const handleLogout = useCallback(async () => {
     try {
       await supabase.auth.signOut();
-      setCurrentPage("today");
-      setUserRole("worker");
-      setUserName("");
     } catch (error) {
       console.error("Logout error:", error);
+    } finally {
+      if (!mountedRef.current) return;
+      setSession(null);
+      setUserRole("worker");
+      setUserName("");
     }
   }, []);
 
-  // Loading state
-  if (isLoading) {
-    return (
-      <div className="loading-screen">
-        <div className="loading-spinner">
-          <svg className="spin" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2">
-            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-          </svg>
-          <p>Laen...</p>
-        </div>
-      </div>
-    );
-  }
+  // ---- Activity tracker (throttled; no setState spam) ----
+  useEffect(() => {
+    const events = ["pointerdown", "keydown", "scroll", "touchstart", "click"];
 
-  // Login screen
-  if (!session) {
-    return <Login />;
-  }
+    const markActivity = () => {
+      const now = Date.now();
+      lastActivityRef.current = now;
 
-  // Main app
+      // optional: if you want UI to react to activity later, throttle a state update
+      if (now - lastActivityWriteRef.current >= ACTIVITY_THROTTLE_MS) {
+        lastActivityWriteRef.current = now;
+      }
+    };
+
+    events.forEach((ev) => document.addEventListener(ev, markActivity, { passive: true }));
+    document.addEventListener("visibilitychange", markActivity);
+
+    return () => {
+      events.forEach((ev) => document.removeEventListener(ev, markActivity));
+      document.removeEventListener("visibilitychange", markActivity);
+    };
+  }, []);
+
+  // ---- Session timeout checker (single interval, stable, uses refs) ----
+  useEffect(() => {
+    if (!session) return;
+
+    const tick = () => {
+      const idleMs = Date.now() - lastActivityRef.current;
+      if (idleMs >= SESSION_TIMEOUT_MS) handleLogout();
+    };
+
+    // check every 30s (more responsive), cheap because it's just math
+    const id = window.setInterval(tick, 30_000);
+    return () => window.clearInterval(id);
+  }, [session, handleLogout]);
+
+  // ---- Auth init + listener ----
+  useEffect(() => {
+    mountedRef.current = true;
+
+    (async () => {
+      try {
+        const { data } = await supabase.auth.getSession();
+        const currentSession = data?.session || null;
+
+        if (!mountedRef.current) return;
+
+        setSession(currentSession);
+
+        if (currentSession?.user?.id) {
+          await loadUserProfile(currentSession.user.id);
+        } else {
+          setUserRole("worker");
+          setUserName("");
+        }
+      } catch (error) {
+        console.error("Auth initialization error:", error);
+      } finally {
+        if (mountedRef.current) setIsLoading(false);
+      }
+    })();
+
+    const { data: listener } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+      if (!mountedRef.current) return;
+
+      setSession(newSession);
+
+      if (newSession?.user?.id) {
+        lastActivityRef.current = Date.now();
+        await loadUserProfile(newSession.user.id);
+      } else {
+        setUserRole("worker");
+        setUserName("");
+      }
+    });
+
+    return () => {
+      mountedRef.current = false;
+      listener?.subscription?.unsubscribe?.();
+    };
+  }, [loadUserProfile]);
+
+  // ---- UI ----
+  if (isLoading) return <LoadingScreen />;
+  if (!session) return <Login />;
+
   return (
     <div className="app-shell">
       <Sidebar
-        currentPage={currentPage}
-        onNavigate={setCurrentPage}
         userRole={userRole}
         onLogout={handleLogout}
         isMobile={isMobile}
         userName={userName}
       />
       <main className="main-content">
-        {currentPage === "today" && (
-          <Today session={session} userRole={userRole} onLogout={handleLogout} />
-        )}
-        {currentPage === "fuel" && (
-          <Fuel session={session} userRole={userRole} />
-        )}
-        {currentPage === "admin" && userRole === "admin" && <Admin />}
-        {currentPage === "stats" && userRole === "admin" && <Stats />}
-        {currentPage === "users" && userRole === "admin" && <Users />}
-        {currentPage === "locations" && userRole === "admin" && <Locations />}
+        <Routes>
+          <Route path="/" element={<Today session={session} userRole={userRole} onLogout={handleLogout} />} />
+          <Route path="/fuel" element={<Fuel session={session} userRole={userRole} />} />
+          {userRole === "admin" && (
+            <>
+              <Route path="/notifications" element={<Notifications />} />
+              <Route path="/admin" element={<Admin />} />
+              <Route path="/stats" element={<Stats />} />
+              <Route path="/users" element={<Users />} />
+              <Route path="/locations" element={<Locations />} />
+            </>
+          )}
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
       </main>
+      {session && <PWAInstallPrompt />}
     </div>
   );
 }

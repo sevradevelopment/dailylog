@@ -7,6 +7,21 @@ const MACHINES = ["Harvester", "Forwarder", "Hakkur", "Traktor", "Veoauto", "Muu
 const ADMIN_WORK_TYPES = ["Hakkepuiduvedamine", "Hakkepuidutootmine"];
 const VEHICLE_PLATES = ["508HVY", "806VDM", "176MRM", "102GBS", "324MTC", "838VZW", "251GTR", "304RVW", "133LHL"];
 
+// Helper tips for workers - shows random tip each day
+const getDailyTip = () => {
+  const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+  const tips = [
+    "💡 Päevikusse tasub märkida kõik oluline - nii näed oma töö progressi!",
+    "⏰ Ära unusta puhkepausi kellaaegu - see on seadusega nõutud!",
+    "🚛 Vedajatele: auto numbrimärk ja km on olulised kulude jälgimiseks.",
+    "🌲 Hakkurid: puidu kogus m³ on tähtis tootmise planeerimiseks.",
+    "📝 Probleemid ja takistused tasub kohe ära märkida - nii saab abi kiiremini!",
+    "✅ Kontrolli alati üle, et kõik väljad oleksid täidetud!",
+    "🌳 Hea töö algab õigest planeerimisest - märgi kõik ära!",
+  ];
+  return tips[dayOfYear % tips.length];
+};
+
 const ICON_PATHS = {
   check: <path d="M20.285 2l-11.285 11.567-5.286-5.011-3.714 3.716 9 8.728 15-15.285z"/>,
   x: <path d="M18.364 5.636l-3.536 3.536 3.536 3.536-1.414 1.414-3.536-3.536-3.536 3.536-1.414-1.414 3.536-3.536-3.536-3.536 1.414-1.414 3.536 3.536 3.536-3.536z"/>,
@@ -73,6 +88,7 @@ export default function Today({ session, userRole, onLogout }) {
   const [messageType, setMessageType] = useState("success");
   const [loadingSites, setLoadingSites] = useState(true);
   const [savedToday, setSavedToday] = useState(false);
+  const [dailyTip] = useState(getDailyTip());
 
   const isDriver = userRole === "vedaja";
   const isHakker = userRole === "hakkur";
@@ -270,14 +286,11 @@ export default function Today({ session, userRole, onLogout }) {
         </div>
       )}
 
-      {/* Motivational Quote */}
-      <div className="card" style={{ background: "linear-gradient(135deg, #dbeafe 0%, #f0f9ff 100%)", border: "1px solid #bfdbfe", marginBottom: "2rem" }}>
+      {/* Daily Tip */}
+      <div className="card" style={{ background: "linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)", border: "1px solid #fbbf24", marginBottom: "2rem" }}>
         <div style={{ textAlign: "center", padding: "1rem" }}>
-          <p style={{ fontSize: "1.1rem", fontStyle: "italic", color: "var(--text-secondary)", margin: 0 }}>
-            "Iga päev on uus võimalus olla parem kui eile."
-          </p>
-          <p style={{ fontSize: "0.9rem", color: "var(--text-tertiary)", marginTop: "0.5rem" }}>
-            – Tööpäeviku meeskond
+          <p style={{ fontSize: "1rem", color: "#92400e", margin: 0, fontWeight: "500" }}>
+            {dailyTip}
           </p>
         </div>
       </div>

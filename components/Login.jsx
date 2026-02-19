@@ -1,17 +1,50 @@
-import { useState } from "react";
+import React, { useMemo, useState } from "react";
 import { auth } from "../supabase";
 
 const SALT = import.meta.env.VITE_PIN_SALT;
 
 const ICON_PATHS = {
-  tree: <path d="M12 2l2.09 4.26L19 7.27l-4 3.9 1.18 6.88L12 15.77l-4.18 2.28L9 11.17 5 7.27l4.91-.01L12 2z"/>,
+  tree: (
+    <path d="M12 2l2.09 4.26L19 7.27l-4 3.9 1.18 6.88L12 15.77l-4.18 2.28L9 11.17 5 7.27l4.91-.01L12 2z" />
+  ),
 };
 
 const Ico = ({ name, size = 18, ...props }) => (
-  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" {...props}>
+  <svg
+    width={size}
+    height={size}
+    viewBox="0 0 24 24"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="2"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+    {...props}
+  >
     {ICON_PATHS[name]}
   </svg>
 );
+
+function Spinner(props) {
+  return (
+    <svg className="spin" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" {...props}>
+      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+    </svg>
+  );
+}
+
+function AlertError({ children }) {
+  return (
+    <div className="alert alert-error" role="alert" aria-live="polite">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="8" x2="12" y2="12" />
+        <line x1="12" y1="16" x2="12.01" y2="16" />
+      </svg>
+      <span>{children}</span>
+    </div>
+  );
+}
 
 export default function Login() {
   const [email, setEmail] = useState("");
@@ -19,38 +52,57 @@ export default function Login() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
+  const supabase = useMemo(() => auth?.supabase, []);
+
+  const normalizeEmail = (v) => v.trim().toLowerCase();
+  const normalizePin = (v) => v.replace(/\D/g, "").slice(0, 6);
+
+  const getNiceError = (err) => {
+    const msg = String(err?.message || err || "");
+    if (!msg) return "Sisselogimine ebaõnnestus";
+
+    if (msg.includes("Invalid login credentials")) return "Vale e-post või PIN. Palun proovi uuesti.";
+    if (msg.toLowerCase().includes("network")) return "Võrguviga. Palun kontrolli internetti ja proovi uuesti.";
+    if (msg.toLowerCase().includes("timeout")) return "Ühendus aegus. Palun proovi uuesti.";
+    return msg;
+  };
+
   const handleLogin = async (e) => {
     e.preventDefault();
     setMessage("");
 
-    // Validation
-    if (!email.trim() || !email.includes("@")) {
+    const eMail = normalizeEmail(email);
+    const p = normalizePin(pin);
+
+    if (!eMail || !eMail.includes("@")) {
       setMessage("Palun sisesta kehtiv e-posti aadress");
       return;
     }
 
-    if (!pin.trim() || pin.length < 4) {
+    if (!p || p.length < 4) {
       setMessage("PIN peab olema vähemalt 4 numbrit");
+      return;
+    }
+
+    if (!SALT) {
+      setMessage("Seadistusviga: PIN_SALT puudub (VITE_PIN_SALT). Võta ühendust administraatoriga.");
+      return;
+    }
+
+    if (!supabase) {
+      setMessage("Seadistusviga: Supabase klient puudub. Kontrolli ../supabase eksporti.");
       return;
     }
 
     setLoading(true);
 
     try {
-      // Simulate loading for better UX
-      await new Promise(resolve => setTimeout(resolve, 500));
+      // auth.signIn (nagu sul praegu) – jätan samaks
+      const { data: authData, error: authError } = await auth.signIn(eMail, `${p}${SALT}`);
+      if (authError) throw authError;
 
-      const { data: authData, error: authError } = await auth.signIn(
-        email.trim().toLowerCase(),
-        `${pin.trim()}${SALT}`
-      );
-
-      if (authError) {
-        throw authError;
-      }
-
-      // Check if user is disabled
-      if (authData?.user) {
+      // Disabled check
+      if (authData?.user?.id) {
         const { data: profile, error: profileError } = await supabase
           .from("profiles")
           .select("disabled, name")
@@ -68,15 +120,10 @@ export default function Login() {
         }
       }
 
-      // Success - App.jsx will handle navigation
+      // Success – App.jsx navigeerib
     } catch (error) {
       console.error("Login error:", error);
-      
-      if (error.message.includes("Invalid login credentials")) {
-        setMessage("Vale e-post või PIN. Palun proovi uuesti.");
-      } else {
-        setMessage(error.message || "Sisselogimine ebaõnnestus");
-      }
+      setMessage(getNiceError(error));
     } finally {
       setLoading(false);
     }
@@ -85,168 +132,247 @@ export default function Login() {
   return (
     <div className="login-page">
       <div className="login-card">
-        {/* Logo & Branding */}
-        <div style={{ textAlign: "center", marginBottom: "2.5rem" }}>
-          <div
-            style={{
-              width: 72,
-              height: 72,
-              borderRadius: "18px",
-              background: "linear-gradient(135deg, #3b82f6, #1d4ed8)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "2.5rem",
-              margin: "0 auto 1.25rem",
-              boxShadow: "0 10px 30px rgba(59, 130, 246, 0.4)",
-            }}
-          >
-            <Ico name="tree" size={48} />
+        {/* Brand */}
+        <div className="login-brand">
+          <div className="brand-badge" aria-hidden="true">
+            <Ico name="tree" size={44} />
           </div>
-          <h1
-            style={{
-              fontSize: "2rem",
-              fontWeight: "800",
-              color: "var(--text)",
-              marginBottom: "0.5rem",
-              letterSpacing: "-0.02em",
-            }}
-          >
-            Tööpäevik
-          </h1>
-          <p
-            style={{
-              color: "var(--text-secondary)",
-              fontSize: "1rem",
-              fontWeight: "500",
-            }}
-          >
-            Logi sisse oma kontole
-          </p>
+          <h1 className="brand-title">Tööpäevik</h1>
+          <p className="brand-sub">Logi sisse oma kontole</p>
         </div>
 
-        {/* Login Form */}
-        <form onSubmit={handleLogin}>
+        <form onSubmit={handleLogin} className="login-form">
           <div className="field">
-            <label className="label">E-posti aadress</label>
+            <label className="label" htmlFor="email">
+              E-posti aadress
+            </label>
             <input
+              id="email"
               type="email"
               className="input"
               placeholder="nimi@ettevõte.ee"
               value={email}
               onChange={(e) => {
                 setEmail(e.target.value);
-                setMessage("");
+                if (message) setMessage("");
               }}
               disabled={loading}
               autoComplete="email"
               autoFocus
-              style={{ fontSize: "1rem" }}
             />
           </div>
 
-          <div className="field" style={{ marginBottom: "2rem" }}>
-            <label className="label">PIN-kood</label>
+          <div className="field">
+            <label className="label" htmlFor="pin">
+              PIN-kood
+            </label>
             <input
+              id="pin"
               type="password"
-              className="input"
+              className="input input-pin"
               placeholder="••••"
               inputMode="numeric"
               value={pin}
               onChange={(e) => {
-                setPin(e.target.value.replace(/\D/g, ""));
-                setMessage("");
+                setPin(normalizePin(e.target.value));
+                if (message) setMessage("");
               }}
               disabled={loading}
               maxLength={6}
               autoComplete="current-password"
-              style={{
-                fontSize: "1.5rem",
-                letterSpacing: "0.25em",
-                textAlign: "center",
-              }}
             />
           </div>
 
-          {/* Error Message */}
-          {message && (
-            <div
-              className="alert alert-error"
-              style={{ marginBottom: "1.5rem" }}
-            >
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-              >
-                <circle cx="12" cy="12" r="10" />
-                <line x1="12" y1="8" x2="12" y2="12" />
-                <line x1="12" y1="16" x2="12.01" y2="16" />
-              </svg>
-              {message}
-            </div>
-          )}
+          {message && <AlertError>{message}</AlertError>}
 
-          {/* Submit Button */}
-          <button
-            type="submit"
-            className="btn btn-primary btn-full"
-            disabled={loading}
-            style={{ fontSize: "1.0625rem", fontWeight: "700" }}
-          >
+          <button type="submit" className="btn btn-primary btn-full" disabled={loading}>
             {loading ? (
               <>
-                                <svg
-                  className="spin"
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
-                  <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-                </svg>
-                Sisenen...
+                <Spinner />
+                <span>Sisenen…</span>
               </>
             ) : (
               <>
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                >
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                   <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4" />
                   <polyline points="10 17 15 12 10 7" />
                   <line x1="15" y1="12" x2="3" y2="12" />
                 </svg>
-                Sisene
+                <span>Sisene</span>
               </>
             )}
           </button>
         </form>
 
-        {/* Footer */}
-        <div
-          style={{
-            marginTop: "2rem",
-            paddingTop: "1.5rem",
-            borderTop: "1px solid var(--border)",
-            textAlign: "center",
-          }}
-        >
-          <p style={{ fontSize: "0.8125rem", color: "var(--text-tertiary)" }}>
-            Probleemide korral võta ühendust administraatoriga
-          </p>
+        <div className="login-footer">
+          <p>Probleemide korral võta ühendust administraatoriga</p>
         </div>
       </div>
+
+      {/* CSS (tõsta soovi korral eraldi faili) */}
+      <style>{`
+        :root{
+          --bg: #0b1220;
+          --panel: rgba(255,255,255,0.06);
+          --border: rgba(255,255,255,0.10);
+          --text: rgba(255,255,255,0.92);
+          --text-secondary: rgba(255,255,255,0.65);
+          --text-tertiary: rgba(255,255,255,0.45);
+          --primary: #3b82f6;
+          --primary2: #1d4ed8;
+          --danger: #f87171;
+          --radius-xl: 22px;
+          --radius-lg: 16px;
+          --shadow: 0 18px 50px rgba(0,0,0,0.35);
+        }
+
+        .login-page{
+          min-height: 100vh;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          padding: 28px 14px;
+          background:
+            radial-gradient(1100px 600px at 12% -10%, rgba(59,130,246,0.22), transparent 60%),
+            radial-gradient(900px 500px at 110% 10%, rgba(16,185,129,0.14), transparent 55%),
+            var(--bg);
+          color: var(--text);
+        }
+
+        .login-card{
+          width: min(440px, 100%);
+          border: 1px solid var(--border);
+          background: rgba(255,255,255,0.05);
+          border-radius: var(--radius-xl);
+          box-shadow: var(--shadow);
+          padding: 28px 22px 18px;
+          backdrop-filter: blur(10px);
+        }
+
+        .login-brand{
+          text-align:center;
+          margin-bottom: 22px;
+        }
+
+        .brand-badge{
+          width: 76px;
+          height: 76px;
+          border-radius: 20px;
+          margin: 0 auto 14px;
+          display:flex;
+          align-items:center;
+          justify-content:center;
+          background: linear-gradient(135deg, var(--primary), var(--primary2));
+          box-shadow: 0 14px 36px rgba(59,130,246,0.35);
+        }
+
+        .brand-title{
+          margin: 0;
+          font-size: 1.9rem;
+          letter-spacing: -0.02em;
+          font-weight: 850;
+        }
+
+        .brand-sub{
+          margin: 8px 0 0;
+          color: var(--text-secondary);
+          font-weight: 600;
+        }
+
+        .login-form{ display:flex; flex-direction:column; gap: 14px; }
+
+        .field{ display:flex; flex-direction:column; gap: 8px; }
+
+        .label{
+          font-size: 0.9rem;
+          color: var(--text-secondary);
+          font-weight: 700;
+        }
+
+        .input{
+          width: 100%;
+          padding: 12px 14px;
+          border-radius: var(--radius-lg);
+          border: 1px solid rgba(255,255,255,0.12);
+          background: rgba(0,0,0,0.22);
+          color: var(--text);
+          outline: none;
+          font-size: 1rem;
+          transition: border-color 120ms ease, transform 120ms ease, background 120ms ease;
+        }
+
+        .input::placeholder{ color: rgba(255,255,255,0.40); font-weight: 600; }
+
+        .input:focus{
+          border-color: rgba(59,130,246,0.55);
+          background: rgba(0,0,0,0.28);
+        }
+
+        .input:disabled{
+          opacity: 0.65;
+          cursor: not-allowed;
+        }
+
+        .input-pin{
+          font-size: 1.55rem;
+          letter-spacing: 0.28em;
+          text-align: center;
+          padding: 12px 16px;
+        }
+
+        .alert{
+          display:flex;
+          gap: 10px;
+          align-items:flex-start;
+          padding: 12px 12px;
+          border-radius: 16px;
+          border: 1px solid rgba(248,113,113,0.30);
+          background: rgba(248,113,113,0.10);
+          color: rgba(255,255,255,0.92);
+          font-weight: 650;
+        }
+
+        .btn{
+          display:flex;
+          gap: 10px;
+          align-items:center;
+          justify-content:center;
+          border: 1px solid transparent;
+          border-radius: 16px;
+          padding: 12px 14px;
+          cursor:pointer;
+          font-weight: 800;
+          font-size: 1.02rem;
+          transition: transform 120ms ease, filter 120ms ease, border-color 120ms ease;
+          user-select:none;
+        }
+        .btn:active{ transform: scale(0.99); }
+        .btn:disabled{ opacity: 0.7; cursor: not-allowed; }
+
+        .btn-full{ width: 100%; }
+
+        .btn-primary{
+          color: white;
+          background: linear-gradient(135deg, var(--primary), var(--primary2));
+          box-shadow: 0 14px 34px rgba(59,130,246,0.25);
+        }
+        .btn-primary:hover{ filter: brightness(1.04); }
+
+        .login-footer{
+          margin-top: 18px;
+          padding-top: 14px;
+          border-top: 1px solid var(--border);
+          text-align:center;
+          color: var(--text-tertiary);
+          font-weight: 600;
+          font-size: 0.82rem;
+        }
+
+        .spin{
+          animation: spin 1s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+      `}</style>
     </div>
   );
 }
-

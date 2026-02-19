@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "../supabase";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
+import * as XLSX from 'xlsx';
 
 export default function Stats() {
   const [stats, setStats] = useState({ totalHours: 0, totalLogs: 0, activeUsers: 0, thisWeekHours: 0, totalFuelLiters: 0, totalFuelCost: 0 });
@@ -83,6 +84,76 @@ export default function Stats() {
     setLoading(false);
   }
 
+  const exportToExcel = () => {
+    const wb = XLSX.utils.book_new();
+
+    // Summary stats
+    const summaryData = [
+      ["Näitaja", "Väärtus"],
+      ["Kokku tunde", stats.totalHours],
+      ["Kokku logisid", stats.totalLogs],
+      ["Aktiivsed kasutajad (nädal)", stats.activeUsers],
+      ["Tunde sel nädalal", stats.thisWeekHours],
+      ["Kütust liitreid", stats.totalFuelLiters],
+      ["Kütuse kulu", stats.totalFuelCost],
+    ];
+    const summaryWS = XLSX.utils.aoa_to_sheet(summaryData);
+    XLSX.utils.book_append_sheet(wb, summaryWS, "Kokkuvõte");
+
+    // Recent logs
+    const logsData = [
+      ["Kasutaja", "Kuupäev", "Asukoht", "Tunnid", "Loodud"],
+      ...recentLogs.map(log => [
+        log.profiles?.name || log.profiles?.email || "Tundmatu",
+        log.work_date,
+        log.sites?.name || "",
+        log.hours || 0,
+        log.created_at ? new Date(log.created_at).toLocaleString("et-EE") : "",
+      ])
+    ];
+    const logsWS = XLSX.utils.aoa_to_sheet(logsData);
+    XLSX.utils.book_append_sheet(wb, logsWS, "Viimased logid");
+
+    // Hours chart data
+    const hoursData = [
+      ["Kuupäev", "Tunnid"],
+      ...hoursChartData.map(d => [d.date, d.hours])
+    ];
+    const hoursWS = XLSX.utils.aoa_to_sheet(hoursData);
+    XLSX.utils.book_append_sheet(wb, hoursWS, "Tundide graafik");
+
+    XLSX.writeFile(wb, "statistika.xlsx");
+  };
+
+  const exportToCSV = () => {
+    const csvData = [
+      ["Kasutaja", "Kuupäev", "Asukoht", "Tunnid", "Loodud"],
+      ...recentLogs.map(log => [
+        log.profiles?.name || log.profiles?.email || "Tundmatu",
+        log.work_date,
+        log.sites?.name || "",
+        log.hours || 0,
+        log.created_at ? new Date(log.created_at).toLocaleString("et-EE") : "",
+      ])
+    ];
+
+    const csvContent = csvData.map(row => row.map(cell => `"${cell}"`).join(",")).join("\n");
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const link = document.createElement("a");
+    const url = URL.createObjectURL(blob);
+    link.setAttribute("href", url);
+    link.setAttribute("download", "viimased_logid.csv");
+    link.style.visibility = "hidden";
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const openInGoogleSheets = () => {
+    exportToCSV();
+    window.open("https://docs.google.com/spreadsheets/create", "_blank");
+  };
+
   if (loading) return (
     <div className="page" style={{ textAlign: "center", paddingTop: "4rem" }}>
       <svg className="spin" width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="var(--primary)" strokeWidth="2">
@@ -149,7 +220,12 @@ export default function Stats() {
       <div className="card">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1.25rem" }}>
           <h3 style={{ fontSize: "1rem", fontWeight: "700" }}>Viimased logid</h3>
-          <button onClick={loadStats} className="btn btn-secondary btn-sm">Värskenda</button>
+          <div style={{ display: "flex", gap: "0.5rem" }}>
+            <button onClick={exportToExcel} className="btn btn-primary btn-sm">Ekspordi Excel</button>
+            <button onClick={exportToCSV} className="btn btn-secondary btn-sm">Ekspordi CSV</button>
+            <button onClick={openInGoogleSheets} className="btn btn-secondary btn-sm">Google Sheets</button>
+            <button onClick={loadStats} className="btn btn-secondary btn-sm">Värskenda</button>
+          </div>
         </div>
 
         {recentLogs.length === 0 ? (
