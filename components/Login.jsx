@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { auth } from "../supabase";
+import { supabase } from "../supabase";
 
 const SALT = import.meta.env.VITE_PIN_SALT;
 
@@ -52,8 +52,6 @@ export default function Login() {
   const [message, setMessage] = useState("");
   const [loading, setLoading] = useState(false);
 
-  const supabase = useMemo(() => auth?.supabase, []);
-
   const normalizeEmail = (v) => v.trim().toLowerCase();
   const normalizePin = (v) => v.replace(/\D/g, "").slice(0, 6);
 
@@ -90,7 +88,7 @@ export default function Login() {
     }
 
     if (!supabase) {
-      setMessage("Seadistusviga: Supabase klient puudub. Kontrolli ../supabase eksporti.");
+      setMessage("Seadistusviga: Supabase klient puudub. Kontrolli keskkonnamuutujaid.");
       return;
     }
 
