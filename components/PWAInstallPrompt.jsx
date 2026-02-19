@@ -61,8 +61,8 @@ export default function PWAInstallPrompt() {
           ) : (
             <div className="text-sm opacity-90">
               <p>Käsitsi installimiseks:</p>
-              <p>• Android: ⋮ > Lisa avalehele</p>
-              <p>• iPhone: □↑ > Lisa avalehele</p>
+              <p>• Android: ⋮ &gt; Lisa avalehele</p>
+              <p>• iPhone: □↑ &gt; Lisa avalehele</p>
             </div>
           )}
         </div>
