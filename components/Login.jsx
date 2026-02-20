@@ -1,8 +1,9 @@
-import React, { useMemo, useState } from "react";
-import { supabase, auth } from "../supabase";
+import { createClient } from "@supabase/supabase-js";
 
-const SALT = import.meta.env.VITE_PIN_SALT;
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY;
 
+export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 const ICON_PATHS = {
   tree: (
     <path d="M12 2l2.09 4.26L19 7.27l-4 3.9 1.18 6.88L12 15.77l-4.18 2.28L9 11.17 5 7.27l4.91-.01L12 2z" />
