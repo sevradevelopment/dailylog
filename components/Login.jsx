@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from "react";
-import { supabase } from "../supabase";
+import { supabase, auth } from "../supabase";
 
 const SALT = import.meta.env.VITE_PIN_SALT;
 
